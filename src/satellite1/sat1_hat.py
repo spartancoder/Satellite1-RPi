@@ -189,8 +189,10 @@ class XMOS():
     
     def read_status(self) -> StatusRegister | None :
         ok, data = self._cntrl.send_cmd( MAIN_SERVICER.CMD_NO_OP )
-        if ok and len(data) == XMOS.CNTRL_STATUS_LENGTH:
+        if ok and data is not None and len(data) == XMOS.CNTRL_STATUS_LENGTH:
             self._status = data
+            return self._status
+        return None
     
     def reset_xmos(self) -> bool:
         self._ensure_gpio_setup()
