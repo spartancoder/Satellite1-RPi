@@ -88,8 +88,11 @@ def _handle(args: argparse.Namespace) -> int:
 
     if args.cmd == "set-led-ring":
         r, g, b = args.r, args.g, args.b
-        ok = xmos.set_led_ring_color(r, g, b)
-        log.info("Set LED ring to RGB(%d, %d, %d): %s", r, g, b, "OK" if ok else "FAILED")
+        brightness = getattr(args, 'brightness', 1.0)
+        ring = xmos.led_ring()
+        ring.set_brightness(brightness).set_all(r, g, b)
+        ok = ring.commit()
+        log.info("Set LED ring to RGB(%d, %d, %d) @ %.0f%%: %s", r, g, b, brightness * 100, "OK" if ok else "FAILED")
         return 0 if ok else 1
 
     if args.cmd == "led-ring-off":
@@ -97,27 +100,19 @@ def _handle(args: argparse.Namespace) -> int:
         log.info("LED ring off: %s", "OK" if ok else "FAILED")
         return 0 if ok else 1
 
-    if args.cmd == "set-led-brightness":
-        ring = xmos.led_ring()
-        ring.set_brightness(args.brightness)
-        ring.set_all(255, 255, 255)  # Default to white for brightness demo
-        ok = ring.commit()
-        log.info("Set brightness to %.2f: %s", args.brightness, "OK" if ok else "FAILED")
-        return 0 if ok else 1
-
     if args.cmd == "set-led":
         ring = xmos.led_ring()
-        ring.set_led(args.index, args.r, args.g, args.b)
+        ring.set_brightness(args.brightness).set_led(args.index, args.r, args.g, args.b)
         ok = ring.commit()
-        log.info("Set LED %d to RGB(%d, %d, %d): %s", args.index, args.r, args.g, args.b, "OK" if ok else "FAILED")
+        log.info("Set LED %d to RGB(%d, %d, %d) @ %.0f%%: %s", args.index, args.r, args.g, args.b, args.brightness * 100, "OK" if ok else "FAILED")
         return 0 if ok else 1
 
     if args.cmd == "toggle-led":
         ring = xmos.led_ring()
-        ring.toggle_led(args.index, args.r, args.g, args.b)
+        ring.set_brightness(args.brightness).toggle_led(args.index, args.r, args.g, args.b)
         ok = ring.commit()
         state = "ON" if ring.get_led(args.index) != (0, 0, 0) else "OFF"
-        log.info("Toggled LED %d %s: %s", args.index, state, "OK" if ok else "FAILED")
+        log.info("Toggled LED %d %s @ %.0f%%: %s", args.index, state, args.brightness * 100, "OK" if ok else "FAILED")
         return 0 if ok else 1
         
     return 2
@@ -141,23 +136,23 @@ def attach_to_parser(parser: argparse.ArgumentParser) -> None:
     led.add_argument("r", type=int, help="Red (0-255)")
     led.add_argument("g", type=int, help="Green (0-255)")
     led.add_argument("b", type=int, help="Blue (0-255)")
+    led.add_argument("--brightness", "-B", type=float, default=1.0, help="Brightness (0.0-1.0, default=1.0)")
 
     sp.add_parser("led-ring-off", help="Turn off LED ring")
-
-    bright = sp.add_parser("set-led-brightness", help="Set LED ring brightness")
-    bright.add_argument("brightness", type=float, help="Brightness level (0.0-1.0)")
 
     setled = sp.add_parser("set-led", help="Set individual LED color")
     setled.add_argument("index", type=int, help="LED index (0-23)")
     setled.add_argument("r", type=int, help="Red (0-255)")
     setled.add_argument("g", type=int, help="Green (0-255)")
     setled.add_argument("b", type=int, help="Blue (0-255)")
+    setled.add_argument("--brightness", "-B", type=float, default=1.0, help="Brightness (0.0-1.0, default=1.0)")
 
     toggle = sp.add_parser("toggle-led", help="Toggle individual LED on/off")
     toggle.add_argument("index", type=int, help="LED index (0-23)")
     toggle.add_argument("r", type=int, nargs="?", default=255, help="Red when on (0-255, default=255)")
     toggle.add_argument("g", type=int, nargs="?", default=255, help="Green when on (0-255, default=255)")
     toggle.add_argument("b", type=int, nargs="?", default=255, help="Blue when on (0-255, default=255)")
+    toggle.add_argument("--brightness", "-B", type=float, default=1.0, help="Brightness (0.0-1.0, default=1.0)")
     
     mo = sp.add_parser("set-mic-output", help="Set the output channels of the i2s microphone")
     mo.add_argument("left", type=int )

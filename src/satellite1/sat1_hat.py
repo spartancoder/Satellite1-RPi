@@ -209,34 +209,50 @@ class XMOS():
         elif self._status == "CNTRL_MODE":
             self.read_status()
         
-    def set_led_ring(self, rgb_data: bytes) -> bool:
+    def set_led_ring(self, rgb_data: bytes, brightness: float = 1.0) -> bool:
         """Set LED ring colors via WS2812.
 
         Args:
             rgb_data: 72 bytes (3 × 24 LEDs), RGB values for each LED.
                       Format: [R0, G0, B0, R1, G1, B1, ..., R23, G23, B23]
+            brightness: Brightness level (0.0-1.0, default=1.0)
 
         Returns:
             True if successful, False otherwise.
         """
         if len(rgb_data) != 72:
             raise ValueError(f"Expected 72 bytes (3×24 LEDs), got {len(rgb_data)}")
+        if brightness != 1.0:
+            rgb_data = self._apply_brightness_to_bytes(rgb_data, brightness)
         ok, _ = self._cntrl.send_cmd(LED_RING_SERVICER.CMD_WRITE_RAW, rgb_data)
         return ok
 
-    def set_led_ring_color(self, r: int, g: int, b: int) -> bool:
+    def _apply_brightness_to_bytes(self, rgb_data: bytes, brightness: float) -> bytes:
+        """Apply brightness scaling to raw RGB bytes."""
+        result = bytearray()
+        for i in range(0, len(rgb_data), 3):
+            r, g, b = rgb_data[i], rgb_data[i+1], rgb_data[i+2]
+            result.extend([
+                int(r * brightness),
+                int(g * brightness),
+                int(b * brightness)
+            ])
+        return bytes(result)
+
+    def set_led_ring_color(self, r: int, g: int, b: int, brightness: float = 1.0) -> bool:
         """Set all LEDs in the ring to the same color.
 
         Args:
             r: Red value (0-255)
             g: Green value (0-255)
             b: Blue value (0-255)
+            brightness: Brightness level (0.0-1.0, default=1.0)
 
         Returns:
             True if successful, False otherwise.
         """
         rgb_data = bytes([r, g, b] * LED_RING_SERVICER.NUM_LEDS)
-        return self.set_led_ring(rgb_data)
+        return self.set_led_ring(rgb_data, brightness)
 
     def set_led_ring_off(self) -> bool:
         """Turn off all LEDs in the ring."""
