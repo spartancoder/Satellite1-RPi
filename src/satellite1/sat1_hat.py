@@ -21,7 +21,7 @@ from .components.xmos_device_cntrl import (
     MAIN_SERVICER,
     AUDIO_CFG_SERVICER,
     SPI_ECHO_SERVICER,
-    GPIO_OUT_A_SERVICER,
+    LED_RING_SERVICER,
 )
 from pydantic import BaseModel, ConfigDict,Field, computed_field
 
@@ -93,21 +93,38 @@ class XMOS():
         elif self._status == "CNTRL_MODE":
             self.read_status()
         
-    def set_led(self, pin: int, value: bool) -> bool:
-        """Set an LED state via GPIO_PORT_OUT_A.
+    def set_led_ring(self, rgb_data: bytes) -> bool:
+        """Set LED ring colors via WS2812.
 
         Args:
-            pin: LED pin number (0-7)
-            value: True for ON, False for OFF
+            rgb_data: 72 bytes (3 × 24 LEDs), RGB values for each LED.
+                      Format: [R0, G0, B0, R1, G1, B1, ..., R23, G23, B23]
 
         Returns:
             True if successful, False otherwise.
         """
-        if not 0 <= pin <= 7:
-            raise ValueError("Pin must be 0-7")
-        payload = bytes([pin, 1 if value else 0])
-        ok, _ = self._cntrl.send_cmd(GPIO_OUT_A_SERVICER.CMD_SET_LED, payload)
+        if len(rgb_data) != 72:
+            raise ValueError(f"Expected 72 bytes (3×24 LEDs), got {len(rgb_data)}")
+        ok, _ = self._cntrl.send_cmd(LED_RING_SERVICER.CMD_WRITE_RAW, rgb_data)
         return ok
+
+    def set_led_ring_color(self, r: int, g: int, b: int) -> bool:
+        """Set all LEDs in the ring to the same color.
+
+        Args:
+            r: Red value (0-255)
+            g: Green value (0-255)
+            b: Blue value (0-255)
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        rgb_data = bytes([r, g, b] * LED_RING_SERVICER.NUM_LEDS)
+        return self.set_led_ring(rgb_data)
+
+    def set_led_ring_off(self) -> bool:
+        """Turn off all LEDs in the ring."""
+        return self.set_led_ring_color(0, 0, 0)
 
     def _ensure_gpio_setup(self) -> None:
         """Idempotent, strict, and self-validating setup for a BCM pin."""

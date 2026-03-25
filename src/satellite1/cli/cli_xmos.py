@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 import time
 
-from ..sat1_hat import XMOS
+from ..sat1_hat import XMOS, LED_RING_SERVICER
 
 log = logging.getLogger(__name__)
 
@@ -86,10 +86,15 @@ def _handle(args: argparse.Namespace) -> int:
         xmos.run_spi_echo_test()
         return 0
 
-    if args.cmd == "set-led":
-        ok = xmos.set_led(args.pin, args.on)
-        state = "ON" if args.on else "OFF"
-        log.info("Set LED pin %d %s: %s", args.pin, state, "OK" if ok else "FAILED")
+    if args.cmd == "set-led-ring":
+        r, g, b = args.r, args.g, args.b
+        ok = xmos.set_led_ring_color(r, g, b)
+        log.info("Set LED ring to RGB(%d, %d, %d): %s", r, g, b, "OK" if ok else "FAILED")
+        return 0 if ok else 1
+
+    if args.cmd == "led-ring-off":
+        ok = xmos.set_led_ring_off()
+        log.info("LED ring off: %s", "OK" if ok else "FAILED")
         return 0 if ok else 1
         
     return 2
@@ -109,9 +114,12 @@ def attach_to_parser(parser: argparse.ArgumentParser) -> None:
     sp.add_parser("disable-flashing", help="Exit XMOS reset mode")
     sp.add_parser("run-spi-test", help="Running the SPI echo test")
 
-    led = sp.add_parser("set-led", help="Set LED state (0=OFF, 1=ON)")
-    led.add_argument("pin", type=int, help="LED pin number (0-7)")
-    led.add_argument("on", type=int, choices=[0, 1], help="0=OFF, 1=ON")
+    led = sp.add_parser("set-led-ring", help="Set LED ring color (RGB)")
+    led.add_argument("r", type=int, help="Red (0-255)")
+    led.add_argument("g", type=int, help="Green (0-255)")
+    led.add_argument("b", type=int, help="Blue (0-255)")
+
+    sp.add_parser("led-ring-off", help="Turn off LED ring")
     
     mo = sp.add_parser("set-mic-output", help="Set the output channels of the i2s microphone")
     mo.add_argument("left", type=int )
