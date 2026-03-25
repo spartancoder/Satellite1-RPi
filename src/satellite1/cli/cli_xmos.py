@@ -85,6 +85,12 @@ def _handle(args: argparse.Namespace) -> int:
         log.info(f"Starting SPI Test")
         xmos.run_spi_echo_test()
         return 0
+
+    if args.cmd == "set-led":
+        ok = xmos.set_led(args.pin, args.on)
+        state = "ON" if args.on else "OFF"
+        log.info("Set LED pin %d %s: %s", args.pin, state, "OK" if ok else "FAILED")
+        return 0 if ok else 1
         
     return 2
 
@@ -102,6 +108,10 @@ def attach_to_parser(parser: argparse.ArgumentParser) -> None:
     sp.add_parser("enable-flashing", help="Put XMOS in reset (flashing mode)")
     sp.add_parser("disable-flashing", help="Exit XMOS reset mode")
     sp.add_parser("run-spi-test", help="Running the SPI echo test")
+
+    led = sp.add_parser("set-led", help="Set LED state (0=OFF, 1=ON)")
+    led.add_argument("pin", type=int, help="LED pin number (0-7)")
+    led.add_argument("on", type=int, choices=[0, 1], help="0=OFF, 1=ON")
     
     mo = sp.add_parser("set-mic-output", help="Set the output channels of the i2s microphone")
     mo.add_argument("left", type=int )
