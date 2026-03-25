@@ -28,6 +28,122 @@ from pydantic import BaseModel, ConfigDict,Field, computed_field
 log = logging.getLogger(__name__)
 
 
+class LEDRing:
+    """Manages WS2812 LED ring with brightness control and individual LED state.
+
+    Maintains internal state of all LED colors and applies brightness scaling
+    when committing changes to hardware.
+    """
+
+    def __init__(self, xmos: "XMOS", num_leds: int = 24):
+        self._xmos = xmos
+        self._num_leds = num_leds
+        self._brightness: float = 1.0  # 0.0 to 1.0
+        # Internal buffer: list of (r, g, b) tuples
+        self._leds: list[tuple[int, int, int]] = [(0, 0, 0)] * num_leds
+
+    @property
+    def num_leds(self) -> int:
+        """Number of LEDs in the ring."""
+        return self._num_leds
+
+    @property
+    def brightness(self) -> float:
+        """Current brightness level (0.0 to 1.0)."""
+        return self._brightness
+
+    @brightness.setter
+    def brightness(self, value: float) -> None:
+        """Set brightness level (0.0 to 1.0)."""
+        if not 0.0 <= value <= 1.0:
+            raise ValueError("Brightness must be between 0.0 and 1.0")
+        self._brightness = value
+
+    def set_brightness(self, value: float) -> "LEDRing":
+        """Set brightness and return self for chaining."""
+        self.brightness = value
+        return self
+
+    def set_led(self, index: int, r: int, g: int, b: int) -> "LEDRing":
+        """Set color of a single LED (does not commit to hardware).
+
+        Args:
+            index: LED index (0 to num_leds-1)
+            r, g, b: Color values (0-255)
+
+        Returns:
+            self for method chaining
+        """
+        if not 0 <= index < self._num_leds:
+            raise ValueError(f"LED index must be 0-{self._num_leds - 1}")
+        if not all(0 <= c <= 255 for c in (r, g, b)):
+            raise ValueError("RGB values must be 0-255")
+        self._leds[index] = (r, g, b)
+        return self
+
+    def set_led_on(self, index: int, r: int = 255, g: int = 255, b: int = 255) -> "LEDRing":
+        """Turn on a single LED with optional color (default white)."""
+        return self.set_led(index, r, g, b)
+
+    def set_led_off(self, index: int) -> "LEDRing":
+        """Turn off a single LED."""
+        return self.set_led(index, 0, 0, 0)
+
+    def toggle_led(self, index: int, r: int = 255, g: int = 255, b: int = 255) -> "LEDRing":
+        """Toggle a single LED on/off.
+
+        Args:
+            index: LED index
+            r, g, b: Color to use when turning on (default white)
+
+        Returns:
+            self for method chaining
+        """
+        if self._leds[index] == (0, 0, 0):
+            return self.set_led(index, r, g, b)
+        else:
+            return self.set_led_off(index)
+
+    def set_all(self, r: int, g: int, b: int) -> "LEDRing":
+        """Set all LEDs to the same color (does not commit)."""
+        self._leds = [(r, g, b)] * self._num_leds
+        return self
+
+    def clear(self) -> "LEDRing":
+        """Turn off all LEDs (does not commit)."""
+        return self.set_all(0, 0, 0)
+
+    def _apply_brightness(self, r: int, g: int, b: int) -> tuple[int, int, int]:
+        """Apply brightness scaling to RGB values."""
+        return (
+            int(r * self._brightness),
+            int(g * self._brightness),
+            int(b * self._brightness),
+        )
+
+    def commit(self) -> bool:
+        """Send current LED state to hardware with brightness applied.
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        # Build 72-byte buffer with brightness-scaled values
+        rgb_bytes = bytearray()
+        for r, g, b in self._leds:
+            sr, sg, sb = self._apply_brightness(r, g, b)
+            rgb_bytes.extend([sr, sg, sb])
+
+        return self._xmos.set_led_ring(bytes(rgb_bytes))
+
+    def get_led(self, index: int) -> tuple[int, int, int]:
+        """Get the color of a single LED (unscaled)."""
+        return self._leds[index]
+
+    def get_leds(self) -> list[tuple[int, int, int]]:
+        """Get all LED colors (unscaled)."""
+        return self._leds.copy()
+
+
 def _func_name(code: int) -> str:
     # Helpful when debugging
     names = {
@@ -125,6 +241,18 @@ class XMOS():
     def set_led_ring_off(self) -> bool:
         """Turn off all LEDs in the ring."""
         return self.set_led_ring_color(0, 0, 0)
+
+    def led_ring(self) -> LEDRing:
+        """Get an LEDRing controller for brightness and individual LED control.
+
+        Returns:
+            LEDRing instance that can manage LED state and brightness.
+
+        Example:
+            ring = xmos.led_ring()
+            ring.set_brightness(0.5).set_led(0, 255, 0, 0).commit()  # 50% bright red LED 0
+        """
+        return LEDRing(self, LED_RING_SERVICER.NUM_LEDS)
 
     def _ensure_gpio_setup(self) -> None:
         """Idempotent, strict, and self-validating setup for a BCM pin."""
