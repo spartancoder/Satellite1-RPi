@@ -76,6 +76,7 @@ class XMOS():
             self._status = data
     
     def reset_xmos(self) -> bool:
+        self._ensure_gpio_setup()
         GPIO.output(self._reset_bcm_pin, GPIO.HIGH)
         time.sleep(0.1)
         GPIO.output(self._reset_bcm_pin, GPIO.LOW)
