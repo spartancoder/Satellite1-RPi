@@ -14,13 +14,14 @@ import logging
 
 from .components.pcm5122 import PCM5122, PCM5122Config, PCM5122GPIOPin
 from .components.xmos_device_cntrl import (
-    DeviceCntrlConfig, 
-    XMOSDeviceCntrl, 
+    DeviceCntrlConfig,
+    XMOSDeviceCntrl,
     DeviceCntrlStatusRegister as StatusRegister,
     DFU_SERVICER,
     MAIN_SERVICER,
     AUDIO_CFG_SERVICER,
-    SPI_ECHO_SERVICER
+    SPI_ECHO_SERVICER,
+    GPIO_OUT_A_SERVICER,
 )
 from pydantic import BaseModel, ConfigDict,Field, computed_field
 
@@ -91,8 +92,21 @@ class XMOS():
         elif self._status == "CNTRL_MODE":
             self.read_status()
         
-    def set_led_states(self) -> None:
-        pass
+    def set_led(self, pin: int, value: bool) -> bool:
+        """Set an LED state via GPIO_PORT_OUT_A.
+
+        Args:
+            pin: LED pin number (0-7)
+            value: True for ON, False for OFF
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        if not 0 <= pin <= 7:
+            raise ValueError("Pin must be 0-7")
+        payload = bytes([pin, 1 if value else 0])
+        ok, _ = self._cntrl.send_cmd(GPIO_OUT_A_SERVICER.CMD_SET_LED, payload)
+        return ok
 
     def _ensure_gpio_setup(self) -> None:
         """Idempotent, strict, and self-validating setup for a BCM pin."""
