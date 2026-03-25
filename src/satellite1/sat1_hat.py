@@ -128,12 +128,13 @@ class LEDRing:
             True if successful, False otherwise.
         """
         # Build 72-byte buffer with brightness-scaled values
-        rgb_bytes = bytearray()
+        # WS2812 expects GRB format, not RGB
+        grb_bytes = bytearray()
         for r, g, b in self._leds:
             sr, sg, sb = self._apply_brightness(r, g, b)
-            rgb_bytes.extend([sr, sg, sb])
+            grb_bytes.extend([sg, sr, sb])  # GRB order
 
-        return self._xmos.set_led_ring(bytes(rgb_bytes))
+        return self._xmos.set_led_ring(bytes(grb_bytes))
 
     def get_led(self, index: int) -> tuple[int, int, int]:
         """Get the color of a single LED (unscaled)."""
@@ -251,8 +252,9 @@ class XMOS():
         Returns:
             True if successful, False otherwise.
         """
-        rgb_data = bytes([r, g, b] * LED_RING_SERVICER.NUM_LEDS)
-        return self.set_led_ring(rgb_data, brightness)
+        # WS2812 expects GRB format, not RGB
+        grb_data = bytes([g, r, b] * LED_RING_SERVICER.NUM_LEDS)
+        return self.set_led_ring(grb_data, brightness)
 
     def set_led_ring_off(self) -> bool:
         """Turn off all LEDs in the ring."""
