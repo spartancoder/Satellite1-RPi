@@ -60,7 +60,13 @@ class AUDIO_CFG_SERVICER():
 
 class SPI_ECHO_SERVICER():
     CMD_SET = DeviceCntrlCMD(37, 10, 128 )
-    CMD_GET = DeviceCntrlCMD(37, 11 | CntrlProto.CMD_READ_BIT, 128 )    
+    CMD_GET = DeviceCntrlCMD(37, 11 | CntrlProto.CMD_READ_BIT, 128 )
+
+class GPIO_OUT_A_SERVICER():
+    """LED outputs on GPIO Port A (resource 0xDD)."""
+    RES_ID = 0xDD
+    CMD_SET_PIN = 0x0A
+    CMD_SET_LED = DeviceCntrlCMD(0xDD, 0x0A, 2)
 
 @dataclass
 class DeviceCntrlStatusRegister:
