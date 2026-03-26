@@ -90,6 +90,25 @@ def _handle(args: argparse.Namespace) -> int:
             print(f"Source {i}: azimuth={src.azimuth_deg:.2f}° elevation={src.elevation_deg:.2f}° confidence={src.confidence} vad={src.vad}")
         return 0
 
+    if args.cmd == "read-mic-gain":
+        gain = xmos.read_mic_gain()
+        if gain is None:
+            log.warning("Failed to read mic gain")
+            print("None")
+            return 1
+
+        log.info("Mic gains: %s", gain.gains)
+        for i, g in enumerate(gain.gains):
+            print(f"Mic {i}: {g:.3f}x (Q8.8: {gain.gains_q8[i]})")
+        return 0
+
+    if args.cmd == "set-mic-gain":
+        gains = [args.mic0, args.mic1, args.mic2, args.mic3]
+        ok = xmos.set_mic_gain(gains)
+        log.info("Set mic gains to %s: %s", gains, "OK" if ok else "FAILED")
+        print("OK" if ok else "FAILED")
+        return 0 if ok else 1
+
     if args.cmd == "set-mic-output":
         log.info(f"Set mic channels to {args.left} and {args.right}")
         xmos.set_mic_left_output( args.left )
@@ -146,6 +165,15 @@ def attach_to_parser(parser: argparse.ArgumentParser) -> None:
     sp.add_parser("setup", help="Initialise SPI/GPIO")
     sp.add_parser("read-firmware", help="Read firmware version")
     sp.add_parser("read-status", help="Read status register")
+    sp.add_parser("read-doa", help="Read Direction of Arrival data")
+
+    sp.add_parser("read-mic-gain", help="Read microphone gain values for all 4 mics")
+
+    mg = sp.add_parser("set-mic-gain", help="Set microphone gain values (1.0 = neutral)")
+    mg.add_argument("mic0", type=float, help="Gain for mic 0 (1.0 = neutral)")
+    mg.add_argument("mic1", type=float, nargs="?", default=1.0, help="Gain for mic 1 (default: 1.0)")
+    mg.add_argument("mic2", type=float, nargs="?", default=1.0, help="Gain for mic 2 (default: 1.0)")
+    mg.add_argument("mic3", type=float, nargs="?", default=1.0, help="Gain for mic 3 (default: 1.0)")
     sp.add_parser("reset", help="Toggle reset pin")
     sp.add_parser("enable-flashing", help="Put XMOS in reset (flashing mode)")
     sp.add_parser("disable-flashing", help="Exit XMOS reset mode")

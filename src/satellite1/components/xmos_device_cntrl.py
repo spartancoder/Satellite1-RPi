@@ -74,6 +74,17 @@ class DOA_SERVICER():
     RESULT_SIZE = 19  # 3 sources (6 bytes each) + count byte
     CMD_GET_DOA = DeviceCntrlCMD(31, 0 | CntrlProto.CMD_READ_BIT, 19)
 
+
+class AUDIO_PIPELINE_SETTINGS_SERVICER():
+    """Audio Pipeline Settings servicer (resource 32) for mic gain control."""
+    RES_ID = 32  # 0x20
+    NUM_CHANNELS = 4
+    PAYLOAD_SIZE = 8  # 4 x uint16_t
+    # Read command: CMD_READ_BIT set
+    CMD_GET_MIC_GAIN = DeviceCntrlCMD(32, 0 | CntrlProto.CMD_READ_BIT, 8)
+    # Write command: no read bit
+    CMD_SET_MIC_GAIN = DeviceCntrlCMD(32, 0, 8)
+
 @dataclass
 class DeviceCntrlStatusRegister:
     device_status: int
@@ -140,6 +151,45 @@ class DOAResult:
     def primary_source(self) -> DOASource | None:
         """Get the primary (first) sound source, if any."""
         return self.sources[0] if self.sources else None
+
+
+@dataclass
+class MicGainResult:
+    """Microphone gain values for all 4 channels.
+
+    Gains are stored in Q8.8 fixed-point format:
+    - 256 = 1.0x (neutral)
+    - Range: 0.0x to 255.996x in 0.00390625 steps
+    """
+    gains_q8: tuple[int, int, int, int]  # Raw Q8.8 values
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> Self:
+        """Parse 8-byte mic gain result (4 x uint16_t little-endian)."""
+        import struct
+        if len(data) < 8:
+            raise ValueError(f"Expected 8 bytes, got {len(data)}")
+        gains = struct.unpack('<HHHH', data[:8])
+        return cls(gains_q8=gains)
+
+    @property
+    def gains(self) -> tuple[float, float, float, float]:
+        """Gains as floating-point multipliers."""
+        return tuple(g / 256.0 for g in self.gains_q8)
+
+    @staticmethod
+    def float_to_q8(value: float) -> int:
+        """Convert float gain to Q8.8 fixed-point."""
+        return int(value * 256) & 0xFFFF
+
+    @staticmethod
+    def to_bytes(gains: Sequence[float]) -> bytes:
+        """Convert 4 float gains to 8-byte payload."""
+        import struct
+        if len(gains) != 4:
+            raise ValueError("Expected 4 gain values")
+        q8_values = [MicGainResult.float_to_q8(g) for g in gains]
+        return struct.pack('<HHHH', *q8_values)
 
 
 

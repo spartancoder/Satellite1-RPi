@@ -25,6 +25,8 @@ from .components.xmos_device_cntrl import (
     DOA_SERVICER,
     DOAResult,
     DOASource,
+    AUDIO_PIPELINE_SETTINGS_SERVICER,
+    MicGainResult,
 )
 from pydantic import BaseModel, ConfigDict,Field, computed_field
 
@@ -259,6 +261,7 @@ class XMOS():
         Returns:
             DOAResult containing sound source directions, or None if read failed.
         """
+        log.info("Called sat1_hat.py read_doa")
         ok, data = self._cntrl.send_cmd(DOA_SERVICER.CMD_GET_DOA)
         if ok and data is not None and len(data) == DOA_SERVICER.RESULT_SIZE:
             try:
@@ -266,6 +269,37 @@ class XMOS():
             except ValueError as e:
                 log.warning("Failed to parse DOA data: %s", e)
         return None
+
+    def read_mic_gain(self) -> MicGainResult | None:
+        """Read microphone gain values from XMOS.
+
+        Returns:
+            MicGainResult containing gain values for all 4 mics, or None if read failed.
+        """
+        log.info("Reading mic gain values")
+        ok, data = self._cntrl.send_cmd(AUDIO_PIPELINE_SETTINGS_SERVICER.CMD_GET_MIC_GAIN)
+        if ok and data is not None and len(data) == AUDIO_PIPELINE_SETTINGS_SERVICER.PAYLOAD_SIZE:
+            try:
+                return MicGainResult.from_bytes(data)
+            except ValueError as e:
+                log.warning("Failed to parse mic gain data: %s", e)
+        return None
+
+    def set_mic_gain(self, gains: list[float]) -> bool:
+        """Set microphone gain values.
+
+        Args:
+            gains: List of 4 float gain values (1.0 = neutral, 0.5 = half, 2.0 = double)
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        if len(gains) != 4:
+            raise ValueError("Expected 4 gain values (one per microphone)")
+        log.info("Setting mic gains to %s", gains)
+        payload = MicGainResult.to_bytes(gains)
+        ok, _ = self._cntrl.send_cmd(AUDIO_PIPELINE_SETTINGS_SERVICER.CMD_SET_MIC_GAIN, payload)
+        return ok
     
     def reset_xmos(self) -> bool:
         self._ensure_gpio_setup()
