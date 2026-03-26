@@ -74,6 +74,22 @@ def _handle(args: argparse.Namespace) -> int:
         print(_fmt_status(st) if st is not None else None)
         return 0 if st is not None else 1
 
+    if args.cmd == "read-doa":
+        doa = xmos.read_doa()
+        if doa is None:
+            log.warning("Failed to read DOA")
+            print("None")
+            return 1
+
+        log.info("DOA: %d source(s)", doa.count)
+        for i, src in enumerate(doa.sources):
+            log.info(
+                "  Source %d: azimuth=%.2f° elevation=%.2f° confidence=%d vad=%d",
+                i, src.azimuth_deg, src.elevation_deg, src.confidence, src.vad
+            )
+            print(f"Source {i}: azimuth={src.azimuth_deg:.2f}° elevation={src.elevation_deg:.2f}° confidence={src.confidence} vad={src.vad}")
+        return 0
+
     if args.cmd == "set-mic-output":
         log.info(f"Set mic channels to {args.left} and {args.right}")
         xmos.set_mic_left_output( args.left )

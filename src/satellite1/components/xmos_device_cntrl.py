@@ -68,15 +68,78 @@ class LED_RING_SERVICER():
     NUM_LEDS = 24
     CMD_WRITE_RAW = DeviceCntrlCMD(0xC8, 0, 3 * 24)  # 72 bytes: RGB per LED
 
+class DOA_SERVICER():
+    """Direction of Arrival servicer (resource 31)."""
+    RES_ID = 31  # 0x1F
+    RESULT_SIZE = 19  # 3 sources (6 bytes each) + count byte
+    CMD_GET_DOA = DeviceCntrlCMD(31, 0 | CntrlProto.CMD_READ_BIT, 19)
+
 @dataclass
 class DeviceCntrlStatusRegister:
     device_status: int
-    gpio_port_a: int 
+    gpio_port_a: int
     gpio_port_b: int
 
     @classmethod
     def from_bytes(cls, data: bytes) -> Self:
         return cls(*map(int, data[:3]))
+
+
+@dataclass
+class DOASource:
+    """Single DOA sound source."""
+    azimuth_cdeg: int      # Azimuth in centidegrees (-18000 to 18000)
+    elevation_cdeg: int    # Elevation in centidegrees (-9000 to 9000)
+    confidence: int        # Confidence level (0-255)
+    vad: int               # Voice Activity Detection (0 or 1)
+
+    @property
+    def azimuth_deg(self) -> float:
+        """Azimuth in degrees."""
+        return self.azimuth_cdeg / 100.0
+
+    @property
+    def elevation_deg(self) -> float:
+        """Elevation in degrees."""
+        return self.elevation_cdeg / 100.0
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> Self:
+        """Parse 6-byte DOA source data."""
+        import struct
+        azimuth, elevation = struct.unpack('<hh', data[:4])
+        return cls(
+            azimuth_cdeg=azimuth,
+            elevation_cdeg=elevation,
+            confidence=data[4],
+            vad=data[5]
+        )
+
+
+@dataclass
+class DOAResult:
+    """DOA result containing up to 3 sound sources."""
+    sources: tuple[DOASource, ...]
+    count: int
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> Self:
+        """Parse 19-byte DOA result."""
+        if len(data) < 19:
+            raise ValueError(f"Expected 19 bytes, got {len(data)}")
+
+        count = data[18]
+        sources = []
+        for i in range(min(count, 3)):
+            offset = i * 6
+            sources.append(DOASource.from_bytes(data[offset:offset + 6]))
+
+        return cls(sources=tuple(sources), count=count)
+
+    @property
+    def primary_source(self) -> DOASource | None:
+        """Get the primary (first) sound source, if any."""
+        return self.sources[0] if self.sources else None
 
 
 

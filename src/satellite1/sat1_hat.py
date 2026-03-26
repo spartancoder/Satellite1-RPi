@@ -22,6 +22,9 @@ from .components.xmos_device_cntrl import (
     AUDIO_CFG_SERVICER,
     SPI_ECHO_SERVICER,
     LED_RING_SERVICER,
+    DOA_SERVICER,
+    DOAResult,
+    DOASource,
 )
 from pydantic import BaseModel, ConfigDict,Field, computed_field
 
@@ -248,6 +251,20 @@ class XMOS():
         if ok and data is not None and len(data) == XMOS.CNTRL_STATUS_LENGTH:
             self._status = data
             return self._status
+        return None
+
+    def read_doa(self) -> DOAResult | None:
+        """Read Direction of Arrival data from XMOS.
+
+        Returns:
+            DOAResult containing sound source directions, or None if read failed.
+        """
+        ok, data = self._cntrl.send_cmd(DOA_SERVICER.CMD_GET_DOA)
+        if ok and data is not None and len(data) == DOA_SERVICER.RESULT_SIZE:
+            try:
+                return DOAResult.from_bytes(data)
+            except ValueError as e:
+                log.warning("Failed to parse DOA data: %s", e)
         return None
     
     def reset_xmos(self) -> bool:
