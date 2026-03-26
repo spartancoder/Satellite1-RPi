@@ -31,7 +31,7 @@ log = logging.getLogger(__name__)
 class LEDRing:
     """Manages WS2812 LED ring with brightness control and individual LED state.
 
-    Maintains internal state of all LED colors and applies brightness scaling
+    Maintains internal state of all LED colors and applies per-LED brightness scaling
     when committing changes to hardware. State is persisted to disk to survive
     across CLI invocations.
     """
@@ -41,9 +41,11 @@ class LEDRing:
     def __init__(self, xmos: "XMOS", num_leds: int = 24):
         self._xmos = xmos
         self._num_leds = num_leds
-        self._brightness: float = 1.0  # 0.0 to 1.0
+        self._default_brightness: float = 1.0  # Default for new LED operations
         # Internal buffer: list of (r, g, b) tuples
         self._leds: list[tuple[int, int, int]] = [(0, 0, 0)] * num_leds
+        # Per-LED brightness values
+        self._led_brightness: list[float] = [1.0] * num_leds
         self._load_state()
 
     @property
@@ -53,27 +55,34 @@ class LEDRing:
 
     @property
     def brightness(self) -> float:
-        """Current brightness level (0.0 to 1.0)."""
-        return self._brightness
+        """Default brightness level for new LED operations (0.0 to 1.0)."""
+        return self._default_brightness
 
     @brightness.setter
     def brightness(self, value: float) -> None:
-        """Set brightness level (0.0 to 1.0)."""
+        """Set default brightness level (0.0 to 1.0)."""
         if not 0.0 <= value <= 1.0:
             raise ValueError("Brightness must be between 0.0 and 1.0")
-        self._brightness = value
+        self._default_brightness = value
 
     def set_brightness(self, value: float) -> "LEDRing":
-        """Set brightness and return self for chaining."""
+        """Set default brightness and return self for chaining."""
         self.brightness = value
         return self
 
-    def set_led(self, index: int, r: int, g: int, b: int) -> "LEDRing":
+    def get_brightness(self, index: int) -> float:
+        """Get brightness of a single LED."""
+        if not 0 <= index < self._num_leds:
+            raise ValueError(f"LED index must be 0-{self._num_leds - 1}")
+        return self._led_brightness[index]
+
+    def set_led(self, index: int, r: int, g: int, b: int, brightness: float | None = None) -> "LEDRing":
         """Set color of a single LED (does not commit to hardware).
 
         Args:
             index: LED index (0 to num_leds-1)
             r, g, b: Color values (0-255)
+            brightness: Optional brightness for this LED (0.0-1.0). Uses default if not specified.
 
         Returns:
             self for method chaining
@@ -83,6 +92,7 @@ class LEDRing:
         if not all(0 <= c <= 255 for c in (r, g, b)):
             raise ValueError("RGB values must be 0-255")
         self._leds[index] = (r, g, b)
+        self._led_brightness[index] = brightness if brightness is not None else self._default_brightness
         return self
 
     def set_led_on(self, index: int, r: int = 255, g: int = 255, b: int = 255) -> "LEDRing":
@@ -93,36 +103,44 @@ class LEDRing:
         """Turn off a single LED."""
         return self.set_led(index, 0, 0, 0)
 
-    def toggle_led(self, index: int, r: int = 255, g: int = 255, b: int = 255) -> "LEDRing":
+    def toggle_led(self, index: int, r: int = 255, g: int = 255, b: int = 255, brightness: float | None = None) -> "LEDRing":
         """Toggle a single LED on/off.
 
         Args:
             index: LED index
             r, g, b: Color to use when turning on (default white)
+            brightness: Optional brightness when turning on. Uses default if not specified.
 
         Returns:
             self for method chaining
         """
         if self._leds[index] == (0, 0, 0):
-            return self.set_led(index, r, g, b)
+            return self.set_led(index, r, g, b, brightness)
         else:
             return self.set_led_off(index)
 
-    def set_all(self, r: int, g: int, b: int) -> "LEDRing":
-        """Set all LEDs to the same color (does not commit)."""
+    def set_all(self, r: int, g: int, b: int, brightness: float | None = None) -> "LEDRing":
+        """Set all LEDs to the same color (does not commit).
+
+        Args:
+            r, g, b: Color values (0-255)
+            brightness: Optional brightness for all LEDs. Uses default if not specified.
+        """
+        brightness_val = brightness if brightness is not None else self._default_brightness
         self._leds = [(r, g, b)] * self._num_leds
+        self._led_brightness = [brightness_val] * self._num_leds
         return self
 
     def clear(self) -> "LEDRing":
         """Turn off all LEDs (does not commit)."""
         return self.set_all(0, 0, 0)
 
-    def _apply_brightness(self, r: int, g: int, b: int) -> tuple[int, int, int]:
+    def _apply_brightness(self, r: int, g: int, b: int, brightness: float) -> tuple[int, int, int]:
         """Apply brightness scaling to RGB values."""
         return (
-            int(r * self._brightness),
-            int(g * self._brightness),
-            int(b * self._brightness),
+            int(r * brightness),
+            int(g * brightness),
+            int(b * brightness),
         )
 
     def _load_state(self) -> None:
@@ -134,7 +152,11 @@ class LEDRing:
                 self._leds = [tuple(led) for led in data.get("leds", [])]
                 if len(self._leds) != self._num_leds:
                     self._leds = [(0, 0, 0)] * self._num_leds
-                self._brightness = data.get("brightness", 1.0)
+                # Load per-LED brightness, defaulting to 1.0 for backward compatibility
+                self._led_brightness = data.get("led_brightness", [1.0] * self._num_leds)
+                if len(self._led_brightness) != self._num_leds:
+                    self._led_brightness = [1.0] * self._num_leds
+                self._default_brightness = data.get("default_brightness", 1.0)
         except Exception:
             log.debug("Could not load LED state, using defaults")
 
@@ -142,13 +164,17 @@ class LEDRing:
         """Persist LED state to disk."""
         import json
         try:
-            data = {"leds": self._leds, "brightness": self._brightness}
+            data = {
+                "leds": self._leds,
+                "led_brightness": self._led_brightness,
+                "default_brightness": self._default_brightness,
+            }
             self._STATE_FILE.write_text(json.dumps(data))
         except Exception as e:
             log.warning("Could not save LED state: %s", e)
 
     def commit(self) -> bool:
-        """Send current LED state to hardware with brightness applied.
+        """Send current LED state to hardware with per-LED brightness applied.
 
         Returns:
             True if successful, False otherwise.
@@ -156,8 +182,8 @@ class LEDRing:
         # Build 72-byte buffer with brightness-scaled values
         # WS2812 expects GRB format, not RGB
         grb_bytes = bytearray()
-        for r, g, b in self._leds:
-            sr, sg, sb = self._apply_brightness(r, g, b)
+        for i, (r, g, b) in enumerate(self._leds):
+            sr, sg, sb = self._apply_brightness(r, g, b, self._led_brightness[i])
             grb_bytes.extend([sg, sr, sb])  # GRB order
 
         ok = self._xmos.set_led_ring(bytes(grb_bytes))

@@ -89,9 +89,7 @@ def _handle(args: argparse.Namespace) -> int:
     if args.cmd == "set-led-ring":
         r, g, b = args.r, args.g, args.b
         ring = xmos.led_ring()
-        if args.brightness is not None:
-            ring.set_brightness(args.brightness)
-        ring.set_all(r, g, b)
+        ring.set_all(r, g, b, brightness=args.brightness)
         ok = ring.commit()
         log.info("Set LED ring to RGB(%d, %d, %d) @ %.0f%%: %s", r, g, b, ring.brightness * 100, "OK" if ok else "FAILED")
         return 0 if ok else 1
@@ -105,21 +103,19 @@ def _handle(args: argparse.Namespace) -> int:
 
     if args.cmd == "set-led":
         ring = xmos.led_ring()
-        if args.brightness is not None:
-            ring.set_brightness(args.brightness)
-        ring.set_led(args.index, args.r, args.g, args.b)
+        ring.set_led(args.index, args.r, args.g, args.b, brightness=args.brightness)
         ok = ring.commit()
-        log.info("Set LED %d to RGB(%d, %d, %d) @ %.0f%%: %s", args.index, args.r, args.g, args.b, ring.brightness * 100, "OK" if ok else "FAILED")
+        brightness = ring.get_brightness(args.index)
+        log.info("Set LED %d to RGB(%d, %d, %d) @ %.0f%%: %s", args.index, args.r, args.g, args.b, brightness * 100, "OK" if ok else "FAILED")
         return 0 if ok else 1
 
     if args.cmd == "toggle-led":
         ring = xmos.led_ring()
-        if args.brightness is not None:
-            ring.set_brightness(args.brightness)
-        ring.toggle_led(args.index, args.r, args.g, args.b)
+        ring.toggle_led(args.index, args.r, args.g, args.b, brightness=args.brightness)
         ok = ring.commit()
         state = "ON" if ring.get_led(args.index) != (0, 0, 0) else "OFF"
-        log.info("Toggled LED %d %s @ %.0f%%: %s", args.index, state, ring.brightness * 100, "OK" if ok else "FAILED")
+        brightness = ring.get_brightness(args.index)
+        log.info("Toggled LED %d %s @ %.0f%%: %s", args.index, state, brightness * 100, "OK" if ok else "FAILED")
         return 0 if ok else 1
         
     return 2
