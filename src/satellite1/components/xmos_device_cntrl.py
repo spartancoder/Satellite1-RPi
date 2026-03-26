@@ -84,6 +84,9 @@ class AUDIO_PIPELINE_SETTINGS_SERVICER():
     CMD_GET_MIC_GAIN = DeviceCntrlCMD(32, 0 | CntrlProto.CMD_READ_BIT, 8)
     # Write command: no read bit
     CMD_SET_MIC_GAIN = DeviceCntrlCMD(32, 0, 8)
+    # DOA LED enabled commands (command ID 1)
+    CMD_GET_DOA_LED_ENABLED = DeviceCntrlCMD(32, 1 | CntrlProto.CMD_READ_BIT, 1)
+    CMD_SET_DOA_LED_ENABLED = DeviceCntrlCMD(32, 1, 1)
 
 @dataclass
 class DeviceCntrlStatusRegister:

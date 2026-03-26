@@ -26,6 +26,7 @@ from .components.xmos_device_cntrl import (
     DOAResult,
     DOASource,
     AUDIO_PIPELINE_SETTINGS_SERVICER,
+
     MicGainResult,
 )
 from pydantic import BaseModel, ConfigDict,Field, computed_field
@@ -278,6 +279,7 @@ class XMOS():
         """
         log.info("Reading mic gain values")
         ok, data = self._cntrl.send_cmd(AUDIO_PIPELINE_SETTINGS_SERVICER.CMD_GET_MIC_GAIN)
+        log.info("read_mic_gain: ok=%s, data=%s (len=%d)", ok, data.hex() if data else None, len(data) if data else 0)
         if ok and data is not None and len(data) == AUDIO_PIPELINE_SETTINGS_SERVICER.PAYLOAD_SIZE:
             try:
                 return MicGainResult.from_bytes(data)
@@ -300,7 +302,33 @@ class XMOS():
         payload = MicGainResult.to_bytes(gains)
         ok, _ = self._cntrl.send_cmd(AUDIO_PIPELINE_SETTINGS_SERVICER.CMD_SET_MIC_GAIN, payload)
         return ok
-    
+
+    def read_doa_led_enabled(self) -> bool | None:
+        """Read DOA LED enabled state from XMOS.
+
+        Returns:
+            True if DOA LED is enabled, False if disabled, None if read failed.
+        """
+        log.info("Reading DOA LED enabled state")
+        ok, data = self._cntrl.send_cmd(AUDIO_PIPELINE_SETTINGS_SERVICER.CMD_GET_DOA_LED_ENABLED)
+        if ok and data is not None and len(data) == 1:
+            return data[0] != 0
+        return None
+
+    def set_doa_led_enabled(self, enabled: bool) -> bool:
+        """Set DOA LED enabled state.
+
+        Args:
+            enabled: True to enable automatic DOA LED, False to disable.
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        log.info("Setting DOA LED enabled to %s", enabled)
+        payload = bytes([1 if enabled else 0])
+        ok, _ = self._cntrl.send_cmd(AUDIO_PIPELINE_SETTINGS_SERVICER.CMD_SET_DOA_LED_ENABLED, payload)
+        return ok
+
     def reset_xmos(self) -> bool:
         self._ensure_gpio_setup()
         GPIO.output(self._reset_bcm_pin, GPIO.HIGH)

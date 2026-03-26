@@ -97,7 +97,7 @@ def _handle(args: argparse.Namespace) -> int:
             print("None")
             return 1
 
-        log.info("Mic gains: %s", gain.gains)
+        log.info("Mic gains: %s (raw Q8.8: %s)", gain.gains, gain.gains_q8)
         for i, g in enumerate(gain.gains):
             print(f"Mic {i}: {g:.3f}x (Q8.8: {gain.gains_q8[i]})")
         return 0
