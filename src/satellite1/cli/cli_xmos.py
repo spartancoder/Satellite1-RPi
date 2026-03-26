@@ -88,31 +88,38 @@ def _handle(args: argparse.Namespace) -> int:
 
     if args.cmd == "set-led-ring":
         r, g, b = args.r, args.g, args.b
-        brightness = getattr(args, 'brightness', 1.0)
         ring = xmos.led_ring()
-        ring.set_brightness(brightness).set_all(r, g, b)
+        if args.brightness is not None:
+            ring.set_brightness(args.brightness)
+        ring.set_all(r, g, b)
         ok = ring.commit()
-        log.info("Set LED ring to RGB(%d, %d, %d) @ %.0f%%: %s", r, g, b, brightness * 100, "OK" if ok else "FAILED")
+        log.info("Set LED ring to RGB(%d, %d, %d) @ %.0f%%: %s", r, g, b, ring.brightness * 100, "OK" if ok else "FAILED")
         return 0 if ok else 1
 
     if args.cmd == "led-ring-off":
-        ok = xmos.set_led_ring_off()
+        ring = xmos.led_ring()
+        ring.clear()
+        ok = ring.commit()
         log.info("LED ring off: %s", "OK" if ok else "FAILED")
         return 0 if ok else 1
 
     if args.cmd == "set-led":
         ring = xmos.led_ring()
-        ring.set_brightness(args.brightness).set_led(args.index, args.r, args.g, args.b)
+        if args.brightness is not None:
+            ring.set_brightness(args.brightness)
+        ring.set_led(args.index, args.r, args.g, args.b)
         ok = ring.commit()
-        log.info("Set LED %d to RGB(%d, %d, %d) @ %.0f%%: %s", args.index, args.r, args.g, args.b, args.brightness * 100, "OK" if ok else "FAILED")
+        log.info("Set LED %d to RGB(%d, %d, %d) @ %.0f%%: %s", args.index, args.r, args.g, args.b, ring.brightness * 100, "OK" if ok else "FAILED")
         return 0 if ok else 1
 
     if args.cmd == "toggle-led":
         ring = xmos.led_ring()
-        ring.set_brightness(args.brightness).toggle_led(args.index, args.r, args.g, args.b)
+        if args.brightness is not None:
+            ring.set_brightness(args.brightness)
+        ring.toggle_led(args.index, args.r, args.g, args.b)
         ok = ring.commit()
         state = "ON" if ring.get_led(args.index) != (0, 0, 0) else "OFF"
-        log.info("Toggled LED %d %s @ %.0f%%: %s", args.index, state, args.brightness * 100, "OK" if ok else "FAILED")
+        log.info("Toggled LED %d %s @ %.0f%%: %s", args.index, state, ring.brightness * 100, "OK" if ok else "FAILED")
         return 0 if ok else 1
         
     return 2
@@ -136,7 +143,7 @@ def attach_to_parser(parser: argparse.ArgumentParser) -> None:
     led.add_argument("r", type=int, help="Red (0-255)")
     led.add_argument("g", type=int, help="Green (0-255)")
     led.add_argument("b", type=int, help="Blue (0-255)")
-    led.add_argument("--brightness", "-B", type=float, default=1.0, help="Brightness (0.0-1.0, default=1.0)")
+    led.add_argument("--brightness", "-B", type=float, default=None, help="Brightness (0.0-1.0, preserves current if not set)")
 
     sp.add_parser("led-ring-off", help="Turn off LED ring")
 
@@ -145,14 +152,14 @@ def attach_to_parser(parser: argparse.ArgumentParser) -> None:
     setled.add_argument("r", type=int, help="Red (0-255)")
     setled.add_argument("g", type=int, help="Green (0-255)")
     setled.add_argument("b", type=int, help="Blue (0-255)")
-    setled.add_argument("--brightness", "-B", type=float, default=1.0, help="Brightness (0.0-1.0, default=1.0)")
+    setled.add_argument("--brightness", "-B", type=float, default=None, help="Brightness (0.0-1.0, preserves current if not set)")
 
     toggle = sp.add_parser("toggle-led", help="Toggle individual LED on/off")
     toggle.add_argument("index", type=int, help="LED index (0-23)")
     toggle.add_argument("r", type=int, nargs="?", default=255, help="Red when on (0-255, default=255)")
     toggle.add_argument("g", type=int, nargs="?", default=255, help="Green when on (0-255, default=255)")
     toggle.add_argument("b", type=int, nargs="?", default=255, help="Blue when on (0-255, default=255)")
-    toggle.add_argument("--brightness", "-B", type=float, default=1.0, help="Brightness (0.0-1.0, default=1.0)")
+    toggle.add_argument("--brightness", "-B", type=float, default=None, help="Brightness (0.0-1.0, preserves current if not set)")
     
     mo = sp.add_parser("set-mic-output", help="Set the output channels of the i2s microphone")
     mo.add_argument("left", type=int )
