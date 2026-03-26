@@ -32,8 +32,11 @@ class LEDRing:
     """Manages WS2812 LED ring with brightness control and individual LED state.
 
     Maintains internal state of all LED colors and applies brightness scaling
-    when committing changes to hardware.
+    when committing changes to hardware. State is persisted to disk to survive
+    across CLI invocations.
     """
+
+    _STATE_FILE = Path("/tmp/sat1_led_ring_state.json")
 
     def __init__(self, xmos: "XMOS", num_leds: int = 24):
         self._xmos = xmos
@@ -41,6 +44,7 @@ class LEDRing:
         self._brightness: float = 1.0  # 0.0 to 1.0
         # Internal buffer: list of (r, g, b) tuples
         self._leds: list[tuple[int, int, int]] = [(0, 0, 0)] * num_leds
+        self._load_state()
 
     @property
     def num_leds(self) -> int:
@@ -121,6 +125,28 @@ class LEDRing:
             int(b * self._brightness),
         )
 
+    def _load_state(self) -> None:
+        """Load LED state from disk if available."""
+        import json
+        try:
+            if self._STATE_FILE.exists():
+                data = json.loads(self._STATE_FILE.read_text())
+                self._leds = [tuple(led) for led in data.get("leds", [])]
+                if len(self._leds) != self._num_leds:
+                    self._leds = [(0, 0, 0)] * self._num_leds
+                self._brightness = data.get("brightness", 1.0)
+        except Exception:
+            log.debug("Could not load LED state, using defaults")
+
+    def _save_state(self) -> None:
+        """Persist LED state to disk."""
+        import json
+        try:
+            data = {"leds": self._leds, "brightness": self._brightness}
+            self._STATE_FILE.write_text(json.dumps(data))
+        except Exception as e:
+            log.warning("Could not save LED state: %s", e)
+
     def commit(self) -> bool:
         """Send current LED state to hardware with brightness applied.
 
@@ -134,7 +160,10 @@ class LEDRing:
             sr, sg, sb = self._apply_brightness(r, g, b)
             grb_bytes.extend([sg, sr, sb])  # GRB order
 
-        return self._xmos.set_led_ring(bytes(grb_bytes))
+        ok = self._xmos.set_led_ring(bytes(grb_bytes))
+        if ok:
+            self._save_state()
+        return ok
 
     def get_led(self, index: int) -> tuple[int, int, int]:
         """Get the color of a single LED (unscaled)."""
@@ -176,6 +205,7 @@ class XMOS():
         self._reset_bcm_pin = 5 # RPi Header 29
         self._status = None
         self._firmware: str | None = None
+        self._led_ring: LEDRing | None = None
     
     def setup(self, init_spi:bool = True) -> None:
         self._cntrl.open()
@@ -267,12 +297,15 @@ class XMOS():
 
         Returns:
             LEDRing instance that can manage LED state and brightness.
+            The instance is cached, so state persists between calls.
 
         Example:
             ring = xmos.led_ring()
             ring.set_brightness(0.5).set_led(0, 255, 0, 0).commit()  # 50% bright red LED 0
         """
-        return LEDRing(self, LED_RING_SERVICER.NUM_LEDS)
+        if self._led_ring is None:
+            self._led_ring = LEDRing(self, LED_RING_SERVICER.NUM_LEDS)
+        return self._led_ring
 
     def _ensure_gpio_setup(self) -> None:
         """Idempotent, strict, and self-validating setup for a BCM pin."""
